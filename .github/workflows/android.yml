@@ -36,9 +36,24 @@ jobs:
           gradle-version: "8.9"
 
       - name: Build debug APK
-        run: gradle --no-daemon --stacktrace assembleDebug
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon --stacktrace assembleDebug > build.log 2>&1
+          status=$?
+          echo "Gradle exit code: $status"
+          exit "$status"
+
+      - name: Upload Gradle build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: build.log
+          if-no-files-found: error
 
       - name: Upload debug APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Stickers-debug-apk
