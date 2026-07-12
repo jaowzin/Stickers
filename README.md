@@ -1,17 +1,17 @@
 # TikTok Sticker Cache
 
-App Android que usa **Shizuku** para acessar, sem root, o cache de stickers do TikTok em:
+App Android que usa **Shizuku** para acessar, sem root, somente o cache de stickers do TikTok em:
 
 ```text
-/storage/emulated/0/Android/data/com.zhiliaoapp.musically/cache/picture/fresco_custom_cache
+/storage/emulated/0/Android/data/com.zhiliaoapp.musically/cache/picture/fresco_custom_cache/stable_sticker
 ```
 
-O TikTok/Fresco normalmente salva o conteúdo com extensão `.cnt`. O app lê a assinatura binária real, identifica o formato e mostra uma grade com preview.
+A busca é recursiva: o app coleta os arquivos `.cnt` da pasta `stable_sticker` e de qualquer subpasta existente dentro dela. O TikTok/Fresco normalmente salva o conteúdo com extensão `.cnt`; o app lê a assinatura binária real, identifica o formato e mostra uma grade com preview.
 
 ## Recursos
 
 - Integração com Shizuku por `UserService` (UID shell/root).
-- Busca recursiva de todos os arquivos `.cnt`.
+- Busca recursiva de todos os arquivos `.cnt` dentro de `stable_sticker`.
 - Detecção por magic bytes, mesmo quando existe um pequeno cabeçalho antes da mídia.
 - Preview de PNG, JPEG, GIF, WebP, AVIF/HEIC compatíveis com o aparelho.
 - Miniatura e reprodução em loop de MP4, WebM, 3GPP, AVI, Ogg e FLV compatíveis com o aparelho.
@@ -54,7 +54,7 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ## Privacidade e segurança
 
-O serviço aceita somente arquivos cujo caminho canônico esteja dentro da pasta de cache definida no código. O app não envia arquivos para a internet e não solicita permissões comuns de armazenamento.
+O serviço aceita somente arquivos cujo caminho canônico esteja dentro de `stable_sticker`. O app não envia arquivos para a internet e não solicita permissões comuns de armazenamento.
 
 ## Aviso
 
