@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TikTok Sticker Cache</string>
+    <string name="cache_title">Stickers do cache</string>
+    <string name="cache_subtitle">Detecta o formato real dos arquivos .cnt usando Shizuku</string>
+    <string name="grant_shizuku">Conceder acesso</string>
+    <string name="open_shizuku">Abrir Shizuku</string>
+    <string name="refresh">Atualizar</string>
+    <string name="cache_path">/storage/emulated/0/Android/data/com.zhiliaoapp.musically/cache/picture/fresco_custom_cache</string>
+    <string name="waiting">Aguardando conexão com o Shizuku…</string>
+    <string name="no_results">Nenhum sticker encontrado</string>
+    <string name="empty_message">Abra alguns stickers no TikTok e toque em Atualizar.</string>
+    <string name="close">Fechar</string>
+    <string name="preview_error">Não foi possível abrir este arquivo.</string>
+    <string name="preview_not_supported">Preview não suportado para %1$s. O formato ainda foi identificado.</string>
+    <plurals name="sticker_count">
+        <item quantity="one">%d arquivo encontrado</item>
+        <item quantity="other">%d arquivos encontrados</item>
+    </plurals>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Stickers" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/seed</item>
+        <item name="colorSecondary">#00BFA6</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">?attr/colorSurface</item>
+    </style>
+</resources>
