@@ -11,14 +11,14 @@ import java.io.File
 import java.io.FileInputStream
 import java.util.ArrayDeque
 
-class FileService : IFileService.Stub() {
+class FileService() : IFileService.Stub() {
 
-    constructor() {
+    init {
         Log.i(TAG, "FileService iniciado")
     }
 
     @Keep
-    constructor(context: Context) {
+    constructor(context: Context) : this() {
         Log.i(TAG, "FileService iniciado com contexto: $context")
     }
 
