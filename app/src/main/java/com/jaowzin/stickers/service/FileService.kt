@@ -129,6 +129,6 @@ class FileService() : IFileService.Stub() {
     companion object {
         private const val TAG = "StickerFileService"
         private const val MAX_PAGE_SIZE = 200
-        const val CACHE_ROOT = "/storage/emulated/0/Android/data/com.zhiliaoapp.musically/cache/picture/fresco_custom_cache"
+        const val CACHE_ROOT = "/storage/emulated/0/Android/data/com.zhiliaoapp.musically/cache/picture/fresco_custom_cache/stable_sticker"
     }
 }
