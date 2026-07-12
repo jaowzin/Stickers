@@ -6,7 +6,7 @@
     <string name="grant_shizuku">Conceder acesso</string>
     <string name="open_shizuku">Abrir Shizuku</string>
     <string name="refresh">Atualizar</string>
-    <string name="cache_path">/storage/emulated/0/Android/data/com.zhiliaoapp.musically/cache/picture/fresco_custom_cache</string>
+    <string name="cache_path">/storage/emulated/0/Android/data/com.zhiliaoapp.musically/cache/picture/fresco_custom_cache/stable_sticker</string>
     <string name="waiting">Aguardando conexão com o Shizuku…</string>
     <string name="no_results">Nenhum sticker encontrado</string>
     <string name="empty_message">Abra alguns stickers no TikTok e toque em Atualizar.</string>
