@@ -1,6 +1,9 @@
 package com.jaowzin.stickers.ui
 
+import android.Manifest
+import android.app.AlertDialog
 import android.content.ComponentName
+import android.content.ContentValues
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
@@ -12,11 +15,19 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.IBinder
+import android.provider.MediaStore
 import android.provider.Settings
 import android.widget.MediaController
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -34,6 +45,7 @@ import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.text.DateFormat
 import java.util.Date
@@ -104,8 +116,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applySystemBarInsets()
 
         adapter = StickerAdapter(
             onClick = ::showPreview,
@@ -118,12 +133,22 @@ class MainActivity : AppCompatActivity() {
         binding.permissionButton.setOnClickListener { requestShizukuAccess() }
         binding.refreshButton.setOnClickListener { refreshItems() }
         binding.openShizukuButton.setOnClickListener { openShizuku() }
+        binding.saveAllButton.setOnClickListener { saveAllStickers() }
 
         Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
         Shizuku.addBinderDeadListener(binderDeadListener)
         Shizuku.addRequestPermissionResultListener(permissionResultListener)
 
         updateShizukuStatus()
+    }
+
+    private fun applySystemBarInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.rootContainer) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.updatePadding(top = bars.top, bottom = bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(binding.rootContainer)
     }
 
     override fun onDestroy() {
@@ -176,7 +201,7 @@ class MainActivity : AppCompatActivity() {
         val granted = alive && hasShizukuPermission()
 
         binding.statusText.text = customMessage ?: when {
-            !alive -> "Shizuku não está ativo. Abra o Shizuku e inicie pelo Depuração sem fio."
+            !alive -> "Shizuku não está ativo. Abra o Shizuku e inicie pela Depuração sem fio."
             !granted -> "Shizuku ativo. Conceda permissão para ler o cache do TikTok."
             fileService == null -> "Permissão concedida. Conectando ao leitor…"
             else -> "Pronto para ler os stickers do cache."
@@ -184,6 +209,7 @@ class MainActivity : AppCompatActivity() {
         binding.permissionButton.isVisible = !granted
         binding.openShizukuButton.isVisible = !alive
         binding.refreshButton.isEnabled = fileService != null
+        binding.saveAllButton.isEnabled = fileService != null && adapter.currentList.isNotEmpty()
     }
 
     private fun refreshItems() {
@@ -195,6 +221,8 @@ class MainActivity : AppCompatActivity() {
         binding.loading.isVisible = true
         binding.emptyState.isVisible = false
         binding.refreshButton.isEnabled = false
+        binding.saveAllButton.isEnabled = false
+        binding.resultCount.text = "Lendo e removendo duplicados…"
 
         lifecycleScope.launch {
             runCatching {
@@ -211,12 +239,13 @@ class MainActivity : AppCompatActivity() {
                         page.mapTo(items) { StickerItem.fromJson(it) }
                         offset += page.size
                     }
-                    items
+                    deduplicateVisually(items)
                 }
             }.onSuccess { items ->
                 adapter.submitList(items)
                 binding.resultCount.text = resources.getQuantityString(R.plurals.sticker_count, items.size, items.size)
                 binding.emptyState.isVisible = items.isEmpty()
+                binding.saveAllButton.isEnabled = items.isNotEmpty()
             }.onFailure { error ->
                 adapter.submitList(emptyList())
                 binding.resultCount.text = getString(R.string.no_results)
@@ -226,6 +255,22 @@ class MainActivity : AppCompatActivity() {
             binding.loading.isVisible = false
             binding.refreshButton.isEnabled = fileService != null
         }
+    }
+
+    private fun deduplicateVisually(items: List<StickerItem>): List<StickerItem> {
+        val seen = HashSet<String>()
+        val unique = ArrayList<StickerItem>(items.size)
+
+        for (item in items) {
+            val key = runCatching {
+                val file = materializePreview(item)
+                visualFingerprint(item, file)
+            }.getOrElse {
+                "fallback:${item.path}:${item.size}:${item.lastModified}"
+            }
+            if (seen.add(key)) unique.add(item)
+        }
+        return unique
     }
 
     private fun loadThumbnail(item: StickerItem, itemBinding: ItemStickerBinding) {
@@ -269,6 +314,7 @@ class MainActivity : AppCompatActivity() {
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(item.format)
             .setView(dialogBinding.root)
+            .setPositiveButton(R.string.save_sticker, null)
             .setNegativeButton(R.string.close, null)
             .create()
 
@@ -280,6 +326,10 @@ class MainActivity : AppCompatActivity() {
         }
         dialogBinding.previewPath.text = item.path
         dialog.show()
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            saveSingleSticker(item)
+        }
 
         lifecycleScope.launch {
             val result = runCatching {
@@ -324,6 +374,138 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun saveSingleSticker(item: StickerItem) {
+        if (!ensureLegacyWritePermission()) return
+        lifecycleScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val file = materializePreview(item)
+                    saveToDownloads(item, file)
+                }
+            }
+            result.onSuccess {
+                Toast.makeText(this@MainActivity, R.string.saved_one, Toast.LENGTH_LONG).show()
+            }.onFailure { error ->
+                showError(getString(R.string.save_failed), error)
+            }
+        }
+    }
+
+    private fun saveAllStickers() {
+        if (!ensureLegacyWritePermission()) return
+        val items = adapter.currentList.toList()
+        if (items.isEmpty()) return
+
+        binding.loading.isVisible = true
+        binding.saveAllButton.isEnabled = false
+        binding.refreshButton.isEnabled = false
+        binding.resultCount.text = getString(R.string.saving)
+
+        lifecycleScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    var saved = 0
+                    var skipped = 0
+                    for (item in items) {
+                        val file = materializePreview(item)
+                        if (saveToDownloads(item, file)) saved++ else skipped++
+                    }
+                    saved to skipped
+                }
+            }
+
+            result.onSuccess { (saved, skipped) ->
+                val message = if (skipped > 0) {
+                    "$saved stickers salvos; $skipped já existiam em Downloads/StickersDump"
+                } else {
+                    getString(R.string.saved_many, saved)
+                }
+                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+            }.onFailure { error ->
+                showError(getString(R.string.save_failed), error)
+            }
+
+            binding.loading.isVisible = false
+            binding.refreshButton.isEnabled = fileService != null
+            binding.saveAllButton.isEnabled = adapter.currentList.isNotEmpty()
+            binding.resultCount.text = resources.getQuantityString(
+                R.plurals.sticker_count,
+                adapter.currentList.size,
+                adapter.currentList.size
+            )
+        }
+    }
+
+    private fun ensureLegacyWritePermission(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return true
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+            return true
+        }
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+            STORAGE_PERMISSION_REQUEST
+        )
+        Toast.makeText(this, "Conceda a permissão e toque em salvar novamente.", Toast.LENGTH_LONG).show()
+        return false
+    }
+
+    /**
+     * Salva com nome derivado do fingerprint visual. Isso impede que uma nova
+     * codificação do mesmo sticker crie outro arquivo no dump.
+     */
+    private fun saveToDownloads(item: StickerItem, source: File): Boolean {
+        val fingerprint = visualFingerprint(item, source).substringAfter(':').take(24)
+        val extension = item.extension.ifBlank { "bin" }.lowercase(Locale.US)
+        val displayName = "sticker_${fingerprint}.$extension"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = contentResolver
+            val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/$DUMP_FOLDER"
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+
+            resolver.query(
+                collection,
+                arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+                arrayOf(displayName, "$relativePath/"),
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) return false
+            }
+
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                put(MediaStore.MediaColumns.MIME_TYPE, item.mimeType)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(collection, values) ?: error("Falha criando arquivo em Downloads")
+            try {
+                resolver.openOutputStream(uri, "w")?.use { output ->
+                    source.inputStream().use { input -> input.copyTo(output) }
+                } ?: error("Falha abrindo o arquivo de destino")
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            } catch (error: Throwable) {
+                resolver.delete(uri, null, null)
+                throw error
+            }
+            return true
+        }
+
+        @Suppress("DEPRECATION")
+        val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), DUMP_FOLDER)
+        if (!directory.exists() && !directory.mkdirs()) error("Não foi possível criar Downloads/$DUMP_FOLDER")
+        val destination = File(directory, displayName)
+        if (destination.exists()) return false
+        source.inputStream().use { input ->
+            destination.outputStream().use { output -> input.copyTo(output) }
+        }
+        return true
+    }
+
     private fun materializePreview(item: StickerItem): File {
         val service = fileService ?: error("Serviço Shizuku desconectado")
         val previewDir = File(cacheDir, "sticker_previews").apply { mkdirs() }
@@ -337,6 +519,76 @@ class MainActivity : AppCompatActivity() {
             FileOutputStream(destination).use { output -> input.copyTo(output) }
         }
         return destination
+    }
+
+    private fun visualFingerprint(item: StickerItem, file: File): String {
+        return when (item.category) {
+            StickerItem.Category.IMAGE -> {
+                val bitmap = decodeBitmapForFingerprint(file)
+                "image:${hashBitmap(bitmap)}"
+            }
+            StickerItem.Category.VIDEO -> {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(file.absolutePath)
+                    val frame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                        ?: error("Vídeo sem quadro")
+                    val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION).orEmpty()
+                    "video:${hashBitmap(frame)}:$duration"
+                } finally {
+                    retriever.release()
+                }
+            }
+            StickerItem.Category.UNKNOWN -> "binary:${sha256File(file)}"
+        }
+    }
+
+    private fun decodeBitmapForFingerprint(file: File): Bitmap {
+        val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                val width = info.size.width.coerceAtLeast(1)
+                val height = info.size.height.coerceAtLeast(1)
+                val scale = minOf(64f / width, 64f / height, 1f)
+                decoder.setTargetSize(
+                    (width * scale).toInt().coerceAtLeast(1),
+                    (height * scale).toInt().coerceAtLeast(1)
+                )
+            }
+        } else {
+            BitmapFactory.decodeFile(file.absolutePath) ?: error("Imagem inválida")
+        }
+        return if (bitmap.width == 64 && bitmap.height == 64) bitmap else {
+            Bitmap.createScaledBitmap(bitmap, 64, 64, true)
+        }
+    }
+
+    private fun hashBitmap(bitmap: Bitmap): String {
+        val normalized = if (bitmap.width == 64 && bitmap.height == 64) bitmap else {
+            Bitmap.createScaledBitmap(bitmap, 64, 64, true)
+        }
+        val pixels = IntArray(64 * 64)
+        normalized.getPixels(pixels, 0, 64, 0, 0, 64, 64)
+        val buffer = ByteBuffer.allocate(pixels.size * Int.SIZE_BYTES)
+        pixels.forEach(buffer::putInt)
+        return MessageDigest.getInstance("SHA-256").digest(buffer.array()).toHex()
+    }
+
+    private fun sha256File(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                if (read > 0) digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().toHex()
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { byte ->
+        (byte.toInt() and 0xFF).toString(16).padStart(2, '0')
     }
 
     private fun decodeDrawable(file: File, maxDimension: Int): android.graphics.drawable.Drawable {
@@ -407,7 +659,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray())
-        .joinToString("") { "%02x".format(Locale.US, it) }
+        .toHex()
 
     private fun formatBytes(bytes: Long): String {
         if (bytes < 1024) return "$bytes B"
@@ -428,7 +680,9 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val SHIZUKU_PERMISSION_REQUEST = 1001
+        private const val STORAGE_PERMISSION_REQUEST = 1002
         private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
         private const val PAGE_SIZE = 100
+        private const val DUMP_FOLDER = "StickersDump"
     }
 }

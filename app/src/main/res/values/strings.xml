@@ -6,6 +6,8 @@
     <string name="grant_shizuku">Conceder acesso</string>
     <string name="open_shizuku">Abrir Shizuku</string>
     <string name="refresh">Atualizar</string>
+    <string name="save_all">Salvar todos</string>
+    <string name="save_sticker">Salvar sticker</string>
     <string name="cache_path">/storage/emulated/0/Android/data/com.zhiliaoapp.musically/cache/picture/fresco_custom_cache/stable_sticker</string>
     <string name="waiting">Aguardando conexão com o Shizuku…</string>
     <string name="no_results">Nenhum sticker encontrado</string>
@@ -13,8 +15,12 @@
     <string name="close">Fechar</string>
     <string name="preview_error">Não foi possível abrir este arquivo.</string>
     <string name="preview_not_supported">Preview não suportado para %1$s. O formato ainda foi identificado.</string>
+    <string name="saved_one">Sticker salvo em Downloads/StickersDump</string>
+    <string name="saved_many">%1$d stickers salvos em Downloads/StickersDump</string>
+    <string name="save_failed">Não foi possível salvar o sticker.</string>
+    <string name="saving">Salvando stickers…</string>
     <plurals name="sticker_count">
-        <item quantity="one">%d arquivo encontrado</item>
-        <item quantity="other">%d arquivos encontrados</item>
+        <item quantity="one">%d sticker único encontrado</item>
+        <item quantity="other">%d stickers únicos encontrados</item>
     </plurals>
 </resources>
