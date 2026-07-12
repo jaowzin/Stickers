@@ -1,0 +1,1 @@
+CI verification for sticker export and system bar inset changes.
