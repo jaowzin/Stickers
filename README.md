@@ -12,6 +12,9 @@ A busca é recursiva: o app coleta os arquivos `.cnt` da pasta `stable_sticker` 
 
 - Integração com Shizuku por `UserService` (UID shell/root).
 - Busca recursiva de todos os arquivos `.cnt` dentro de `stable_sticker`.
+- Deduplicação por SHA-256 do conteúdo real da mídia, ignorando cabeçalhos extras do cache.
+- Quando existem cópias repetidas, mantém somente o arquivo mais recente.
+- Cache do índice para não recalcular todos os hashes quando os arquivos não mudaram.
 - Detecção por magic bytes, mesmo quando existe um pequeno cabeçalho antes da mídia.
 - Preview de PNG, JPEG, GIF, WebP, AVIF/HEIC compatíveis com o aparelho.
 - Miniatura e reprodução em loop de MP4, WebM, 3GPP, AVI, Ogg e FLV compatíveis com o aparelho.
